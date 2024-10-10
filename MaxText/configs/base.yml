@@ -80,6 +80,8 @@ quantization: ""
 # https://kolonist26-jax-kr.readthedocs.io/en/latest/jax.lax.html#jax.lax.Precision
 matmul_precision: "default"
 activations_in_float32: False # Sets activations to float32 before nonlinearity it true, else dtype
+# Used to replicate the quantization scale to avoid the inefficient XLA fusion for 2d sharding.
+replicate_qua_scale: False
 # Path to file with quantization config - only used for mixed precision.
 # Example configs in ../Maxtext/configs/quantization
 # Allows us to configure different bits, tiling and scale for quantizing selected weights.
