@@ -165,6 +165,7 @@ value_proj: 'remat'
 qkv_proj: 'remat'
 out_proj: 'remat'
 
+optimizer_memory_host_offload: True
 scan_layers: True
 param_scan_axis: 1
 

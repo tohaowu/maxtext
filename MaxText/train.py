@@ -55,6 +55,7 @@ import jax.numpy as jnp
 from jax import random
 from jax.sharding import Mesh
 from jax.experimental import checkify
+from jax.experimental.compute_on import compute_on
 
 from cloud_tpu_diagnostics import diagnostic
 from cloud_tpu_diagnostics.configuration import debug_configuration
@@ -72,6 +73,22 @@ Transformer = models.Transformer
 EPS = 1e-8
 _DEFAULT_OCDBT_TARGET_DATA_FILE_SIZE = 2 * 1024**3
 
+def with_memory_kind(t, memory_kind):
+  return jax.tree_util.tree_map(
+      lambda x: x.with_memory_kind(kind=memory_kind), t
+  )
+  
+def cast_dtype_from_to(nest, src, dst):
+  """All items in nest with dtype src are casted to dtype dst."""
+  return jax.tree_util.tree_map(
+      lambda t: t.astype(dst) if t.dtype == src else t, nest
+  )
+
+def cast_to_bf16(params):
+  return cast_dtype_from_to(params, np.float32, jnp.bfloat16)
+
+def cast_to_f32(params):
+  return cast_dtype_from_to(params, jnp.bfloat16, np.float32)
 
 def validate_train_config(config):
   """Validates the configuration is set correctly for train.py"""
@@ -326,7 +343,7 @@ def loss_fn(model, config, data, dropout_rng, params, is_train=True):
   return loss, aux
 
 
-def train_step(model, config, state, data, dropout_rng):
+def train_step(model, config, state_mesh_shardings, state, data, dropout_rng):
   """
 
   Args:
@@ -374,6 +391,10 @@ def train_step(model, config, state, data, dropout_rng):
     raw_grads = jax.tree_util.tree_map(lambda arr: arr / grad_and_loss["total_weights"], grad_and_loss["grad"])
     aux = jax.tree_map(lambda x: jnp.sum(x, axis=0), aux)
   else:
+    if config.optimizer_memory_host_offload:
+      cast_params = jax.device_put(state.params, with_memory_kind(state_mesh_shardings.params, 'device'))
+      cast_params = cast_to_bf16(cast_params)
+      state = state.replace(params = cast_params)
     grad_func = jax.value_and_grad(loss_fn, argnums=4, has_aux=True)
     (loss, aux), raw_grads = grad_func(model, config, data, dropout_rng, state.params, is_train=True)
   intermediate_outputs = aux["intermediate_outputs"]
@@ -384,16 +405,25 @@ def train_step(model, config, state, data, dropout_rng):
     grads = maxtext_utils.apply_gradient_clipping(raw_grads, state, config.gradient_clipping_threshold)
   else:
     grads = raw_grads
+  if config.optimizer_memory_host_offload:
+    state = state.replace(opt_state = jax.device_put(state.opt_state, jax.tree_util.tree_map(lambda x: x.with_memory_kind(kind='device'), state_mesh_shardings.opt_state)))  
   new_state = state.apply_gradients(grads=grads)
+
+  if config.optimizer_memory_host_offload:
+    new_state = new_state.replace(params = jax.device_put(new_state.params, jax.tree_util.tree_map(lambda x: x.with_memory_kind(kind='pinned_host'), state_mesh_shardings.params)),
+                                  opt_state = jax.device_put(new_state.opt_state, jax.tree_util.tree_map(lambda x: x.with_memory_kind(kind='pinned_host'), state_mesh_shardings.opt_state)))
+    
+  scalar_metrics = {
+    "learning/loss": loss,
+    "learning/moe_lb_loss": moe_lb_loss,
+    "learning/total_weights": total_weights,
+  }
+  if not config.optimizer_memory_host_offload and not config.optimizer_compute_host_offload:
+    scalar_metrics["learning/grad_norm"] = max_utils.l2norm_pytree(grads)
+    scalar_metrics["learning/raw_grad_norm"] = max_utils.l2norm_pytree(raw_grads)
+    scalar_metrics["learning/param_norm"] = max_utils.l2norm_pytree(new_state.params)
   metrics = {
-      "scalar": {
-          "learning/loss": loss,
-          "learning/moe_lb_loss": moe_lb_loss,
-          "learning/total_weights": total_weights,
-          "learning/grad_norm": max_utils.l2norm_pytree(grads),
-          "learning/raw_grad_norm": max_utils.l2norm_pytree(raw_grads),
-          "learning/param_norm": max_utils.l2norm_pytree(new_state.params),
-      },
+      "scalar": scalar_metrics,
       "scalars": {},
   }
 
@@ -537,7 +567,7 @@ def setup_train_loop(config):
   record_goodput(recorder, config, recorder.record_training_preparation_start_time if recorder else None)
   data_iterator, eval_data_iterator = create_data_iterator(config, mesh)
 
-  state, state_mesh_annotations, data_iterator = max_utils.setup_training_state(
+  state, _, state_mesh_shardings, data_iterator = max_utils.setup_training_state(
       model, data_iterator, tx, config, init_rng, mesh, checkpoint_manager
   )
 
@@ -549,7 +579,7 @@ def setup_train_loop(config):
       init_rng,
       writer,
       checkpoint_manager,
-      state_mesh_annotations,
+      state_mesh_shardings,
       model,
       mesh,
       learning_rate_schedule,
@@ -575,7 +605,7 @@ def train_loop(config, state=None):
       init_rng,
       writer,
       checkpoint_manager,
-      state_mesh_annotations,
+      state_mesh_shardings,
       model,
       mesh,
       learning_rate_schedule,
@@ -590,7 +620,7 @@ def train_loop(config, state=None):
       out_shard_train,
       static_argnums_train,
       donate_argnums_train,
-  ) = maxtext_utils.get_functional_train_with_signature(train_step, mesh, state_mesh_annotations, model, config)
+  ) = maxtext_utils.get_functional_train_with_signature(train_step, mesh, state_mesh_shardings, model, config)
 
   if eval_data_iterator:
     # pylint: disable=line-too-long
@@ -600,7 +630,7 @@ def train_loop(config, state=None):
         out_shard_eval,
         static_argnums_eval,
         donate_argnums_eval,
-    ) = maxtext_utils.get_functional_eval_with_signature(eval_step, mesh, state_mesh_annotations, model, config)
+    ) = maxtext_utils.get_functional_eval_with_signature(eval_step, mesh, state_mesh_shardings, model, config)
 
   num_model_parameters = max_utils.calculate_num_params_from_pytree(state.params)
   max_logging.log(f"number parameters: {num_model_parameters/1e9:.3f} billion")
@@ -643,7 +673,8 @@ def train_loop(config, state=None):
   local_metrics_file = open(config.metrics_file, "a", encoding="utf8") if config.metrics_file else None
   running_gcs_metrics = [] if config.gcs_metrics else None
 
-  start_step = get_first_step(state)  # this is the start_step for training
+  # start_step = get_first_step(state)  # this is the start_step for training
+  start_step = 0
   first_profiling_step = start_step + config.skip_first_n_steps_for_profiler
   if config.profiler != "" and first_profiling_step >= config.steps:
     raise ValueError("Profiling requested but initial profiling step set past training final step")
