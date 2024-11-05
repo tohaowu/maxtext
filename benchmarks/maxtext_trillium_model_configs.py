@@ -408,6 +408,37 @@ llama3_1_405b_8192_fsdp_dcn = MaxTextModel(
     ),
 )
 
+llama3_1_70b_131072 = MaxTextModel(
+    model_name="llama3_1-70b-131072",
+    model_type="llama3.1-70b",
+    tuning_params={
+        "per_device_batch_size": 0.25,
+        "ici_fsdp_parallelism": -1,
+        "ici_sequence_parallelism": 4,
+        "remat_policy": "custom",
+        "decoder_layer_input": "offload",
+        "max_target_length": 131072,
+        "attention": "flash",
+        "use_iota_embed": True,
+        "dataset_path": "gs://max-datasets-rogue",
+        "enable_checkpointing": False,
+        "sa_block_q": 2048,
+        "sa_block_q_dkv": 2048,
+        "sa_block_q_dq": 2048,
+        "profiler": "xplane",
+        "skip_first_n_steps_for_profiler": 10,
+        "profiler_steps": 5,
+        "allow_split_physical_axes": True,
+        "custom_mesh": "hybrid_ring_64x4",
+        "monitor_goodput": False,
+        "enable_goodput_recording": False,
+    },
+    xla_flags=(
+        xla_flags_library.DENSE_VMEM_LIMIT_FLAG
+        + xla_flags_library.ENABLE_SPARECORE_OFFLOADING_FOR_1D_ALL_GATHER
+    ),
+)
+
 mixtral_8x7b_dropless = MaxTextModel(
     model_name="mixtral-8x7b",
     model_type="mixtral-8x7b",
@@ -572,6 +603,7 @@ maxstar_models = [
     llama3_8b_8192,  # Not Optimizied yet
     llama3_70b_8192,  # Not Optimizied yet
     llama3_1_405b_8192_fsdp_dcn,
+    llama3_1_70b_131072,
     mixtral_8x7b_dropped,
     mixtral_8x7b_dropped_int8,
     mixtral_8x7b_dropless,

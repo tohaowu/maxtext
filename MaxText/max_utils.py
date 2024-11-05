@@ -361,6 +361,41 @@ def fill_unspecified_mesh_axes(parallelism_vals, target_product, parallelism_typ
 
   return parallelism_vals
 
+# def create_custom_64x4_ici_device_mesh(
+#     mesh_shape: Sequence[int],
+#     devices: Sequence[Any] | None = None,
+#     *,
+#     contiguous_submeshes: bool = False,
+#     allow_split_physical_axes: bool = False,
+# ) -> np.ndarray:
+#   if np.prod(mesh_shape) != len(devices):
+#     raise ValueError(
+#         f'Number of devices {len(devices)} must equal the product '
+#         f'of mesh_shape {mesh_shape}'
+#     )
+#   last_device = devices[-1]
+
+#   # handler = device_kind_handler_dict.get(last_device.device_kind, None)
+#   # if handler is not None:
+#   #   result = handler(
+#   #       mesh_shape, devices, contiguous_submeshes=contiguous_submeshes
+#   #   )
+#   #   if result is not None:
+#   #     return result
+
+#   if last_device.platform == 'tpu':
+#     physical_mesh = _get_physical_tpu_mesh(devices)
+#     # if contiguous_submeshes:
+#     #   physical_mesh = _transpose_trick(physical_mesh, mesh_shape)
+#     device_mesh, _ = _create_device_mesh_for_nd_torus(
+#         physical_mesh,
+#         mesh_shape,
+#         allow_split_physical_axes=allow_split_physical_axes,
+#     )
+#     return device_mesh
+#   else:
+#     device_mesh = np.asarray(devices).reshape(mesh_shape)
+#     return device_mesh
 
 def create_custom_64x4_device_mesh(
     mesh_shape: Sequence[int],
@@ -411,6 +446,18 @@ def create_custom_64x4_device_mesh(
   device_mesh = np.block(blocks.tolist())
   return device_mesh
 
+def reshape_mesh_to_rings(a):
+  b = []
+  for i in range(8):
+    b.append([])
+    for j in range(8):
+      a_i = i * 2
+      a_j = j * 2
+      # forms a ring of size 4
+      b[i].append([a[a_i, a_j], a[a_i, a_j + 1], a[a_i + 1, a_j + 1], a[a_i + 1, a_j]])
+  b = np.array(b)
+  b = np.reshape(b, (64, 4))
+  return b
 
 def create_device_mesh(config, devices=None):
   """Creates a device mesh with each slice in its own data parallel group. If there is only one slice, uses two replicas"""
@@ -467,12 +514,29 @@ def create_device_mesh(config, devices=None):
       )
   else:
     if allow_split_physical_axes:
-      mesh = mesh_utils.create_device_mesh(
-          ici_parallelism,
-          devices,
-          contiguous_submeshes=False,
-          allow_split_physical_axes=allow_split_physical_axes,
-      )
+      if config.custom_mesh == "hybrid_ring_64x4":
+        # asserting on ici parallelism
+        assert sorted(set(ici_parallelism)) == [
+            1,
+            4,
+            64,
+        ], f"Invalid custom_mesh:{config.custom_mesh} chosen for ICI mesh shape {ici_parallelism}"
+        # mesh = create_custom_64x4_device_mesh(ici_parallelism, dcn_parallelism, devices)
+        mesh = mesh_utils.create_device_mesh(
+            [16, 16],
+            devices,
+            contiguous_submeshes=False,
+            allow_split_physical_axes=False,
+        )
+        mesh = reshape_mesh_to_rings(mesh)
+        mesh = np.reshape(mesh, ici_parallelism)
+      else:
+        mesh = mesh_utils.create_device_mesh(
+            ici_parallelism,
+            devices,
+            contiguous_submeshes=False,
+            allow_split_physical_axes=allow_split_physical_axes,
+        )
     else:
       mesh = mesh_utils.create_device_mesh(
           ici_parallelism,
