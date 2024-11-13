@@ -201,8 +201,8 @@ def timed(msg):
 
 def _classify_query(dataset_rows, index, query_batches):
   sample = dataset_rows[index][1]
-  input_len = sample.tok_input_length
-  total_len = int(sample.tok_input_length + FLAGS.tok_outlen_multiplier * sample.tok_output_length)
+  input_len = sample.tok_input_len
+  total_len = int(sample.tok_input_len + FLAGS.tok_outlen_multiplier * sample.tok_ref_output_len)
   query_batch_keys = list(query_batches.keys())
   query_batch_keys.sort()
   target_inputs = [lb[0] for lb in query_batch_keys]
@@ -333,6 +333,9 @@ class SUT:
       self.offline_inf_instances[group_idx].decode_state = None
       gc.collect()
       for key, val in result.items():
+        if not val:
+          log.info(f"Value empty for key {key}")
+          continue
         key = int(key)
         lg.FirstTokenComplete([make_response(key, [val[0]])])
         resp = make_response(key, val)
@@ -379,7 +382,7 @@ def make_response(id_, response_token_ids):
 
 
 def _estimated_counts_by_bucket(dataset):
-  total_len = dataset.tok_input_length + dataset.tok_output_length
+  total_len = dataset.tok_input_len + dataset.tok_ref_output_len
   query_batches = _init_query_batches()
   prefix_lens = [l for l, b in list(query_batches.keys())]
   prefix_lens.sort()
@@ -391,7 +394,7 @@ def _estimated_counts_by_bucket(dataset):
   estimates = {}
   for prefix_len in prefix_lens[:-1]:
     target_len = 2 * prefix_len
-    condition = (total_len <= target_len) & (dataset.tok_input_length <= prefix_len)
+    condition = (total_len <= target_len) & (dataset.tok_input_len <= prefix_len)
     count = len(dataset[condition])
     estimates[f"{prev_len}-{prefix_len}"] = math.ceil((count - total_count) * mult)
     total_count = count
