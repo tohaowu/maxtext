@@ -58,8 +58,14 @@ fi
 
 export TOK_OUTLEN_MULTIPLIER=${token_multiplier}
 
-CHECKPOINT="gs://${USER}-bkt/checkpoints/quant_llama2-70b-chat/prod/int8_"
-TOKENIZER_PATH="/home/${USER}/maxtext/assets/tokenizer.llama2"
+if [[ -z ${CHECKPOINT} ]] ; then
+  export CHECKPOINT="gs://${USER}-bkt/checkpoints/quant_llama2-70b-chat/prod/int8_"
+fi
+
+if [[ -z ${TOKENIZER_PATH} ]] ; then
+  export TOKENIZER_PATH="/home/${USER}/maxtext/assets/tokenizer.llama2"
+fi
+
 BASE_CFG="model_name=llama2-70b tokenizer_path=${TOKENIZER_PATH} load_parameters_path=${CHECKPOINT}"
 QUANT_CFG="quantization=int8 quantize_kvcache=True checkpoint_is_quantized=True"
 LAYOUT_CFG="compute_axis_order=0,2,1,3 ar_cache_axis_order=0,2,1,3"
