@@ -220,7 +220,7 @@ class PipelineParallelismTest(unittest.TestCase):
         scan_pipeline_iterations=False,
         scan_layers_per_stage=True,
         set_remat_policy_on_pipeline_iterations=False,
-        set_remat_policy_on_layers_per_stage=True
+        set_remat_policy_on_layers_per_stage=True,
     )
     config = pyconfig.config
     self.assert_pipeline_same_output_and_grad(config)

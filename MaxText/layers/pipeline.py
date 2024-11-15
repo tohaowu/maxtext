@@ -433,15 +433,13 @@ class Pipeline(nn.Module):
 
   def get_pipeline_remat_policy(self):
     # We ensure that the decoder layer inputs are saved, although we leave it to a custom
-    # policy if they should be saved to device or offloaded. 
+    # policy if they should be saved to device or offloaded.
     if self.remat_policy != "custom":
       save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input", "decoder_layer_input")
     else:
       save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input")
     if self.remat_policy is not None:
-      remat_policy = jax.checkpoint_policies.save_from_both_policies(
-        self.remat_policy, save_input_policy
-    )
+      remat_policy = jax.checkpoint_policies.save_from_both_policies(self.remat_policy, save_input_policy)
     else:
       remat_policy = save_input_policy
     return remat_policy
@@ -560,9 +558,9 @@ class Pipeline(nn.Module):
 
     if self.config.set_remat_policy_on_pipeline_iterations:
       run_iteration_scannable = nn.remat(
-        run_iteration_scannable,
-        prevent_cse=not self.config.scan_pipeline_iterations,  # prevent_cse not used with scan
-        policy=self.get_pipeline_remat_policy(),
+          run_iteration_scannable,
+          prevent_cse=not self.config.scan_pipeline_iterations,  # prevent_cse not used with scan
+          policy=self.get_pipeline_remat_policy(),
       )
 
     # The scan cannot be used on init since it broadcasts the weights, which aren't yet initialized.

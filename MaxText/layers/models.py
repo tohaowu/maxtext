@@ -255,17 +255,15 @@ class Decoder(nn.Module):
     if cfg.num_layers_per_pipeline_stage == 1:
       stage_module = base_stage(config=cfg, mesh=mesh, quant=self.quant)
     elif cfg.scan_layers_per_stage:
-      stage_module = self.scan_decoder_layers(
-        cfg, base_stage, cfg.num_layers_per_pipeline_stage, "layers_per_stage", mesh
-      )
+      stage_module = self.scan_decoder_layers(cfg, base_stage, cfg.num_layers_per_pipeline_stage, "layers_per_stage", mesh)
     else:
-        stage_module = SequentialBlockDecoderLayers(
-            decoder_layer=base_stage,
-            num_decoder_layers=cfg.num_layers_per_pipeline_stage,
-            config=cfg,
-            mesh=mesh,
-            quant=self.quant,
-        )
+      stage_module = SequentialBlockDecoderLayers(
+          decoder_layer=base_stage,
+          num_decoder_layers=cfg.num_layers_per_pipeline_stage,
+          config=cfg,
+          mesh=mesh,
+          quant=self.quant,
+      )
     return stage_module
 
   @nn.compact
@@ -366,7 +364,7 @@ class Decoder(nn.Module):
         static_argnums=(4, 5),  # Deterministic and model mode are static arguments.
     )
     if cfg.using_pipeline_parallelism:
-      base_stage = RemattedBlockLayer if  cfg.set_remat_policy_on_layers_per_stage else BlockLayer
+      base_stage = RemattedBlockLayer if cfg.set_remat_policy_on_layers_per_stage else BlockLayer
       stage_module = self.get_pipeline_stage_module(base_stage, cfg, mesh)
       y = pipeline.Pipeline(config=cfg, mesh=mesh, layers=stage_module, remat_policy=policy)(
           y,
