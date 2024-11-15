@@ -144,7 +144,10 @@ num_pipeline_repeats: -1
 # num_pipeline_microbatches must be a multiple of the number of pipeline stages. By default it is set to the number of stages.
 # Note the microbatch_size is given by global_batch_size / num_pipeline_microbatches, where global_batch_size = per_device_batch_size * num_devices
 num_pipeline_microbatches: -1
-scan_pipeline_iterations: True # This can be set independently of scan_layers, which is relevant when num_layers_per_pipeline_stage > 1.
+scan_pipeline_iterations: True # This can be set independently of scan_layers_per_stage, which is relevant when num_layers_per_pipeline_stage > 1.
+scan_layers_per_stage: False # We recommend you keep this to false as we observe unexpected poor behavior when set to true.
+set_remat_policy_on_pipeline_iterations: True
+set_remat_policy_on_layers_per_stage: False # We recommend you keep this to false as we observe unexpected poor behavior when set to true.
 pipeline_delay_activation_forwarding: False # This delays the activation forwarding one loop iteration simplifying XLA's task of overlapping since
 # the communication and compute in each iteration are now independent. However this comes at the cost of doubling the pipeline bubble,
 # and you must set the number of microbatches to at least 2 * num_stages (the minimum 2 * num_stages is set by default with this delay).
