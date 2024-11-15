@@ -253,24 +253,16 @@ class Decoder(nn.Module):
     )
     return scan_fn(config=cfg, mesh=mesh, name="layers", quant=self.quant)
 
-  def get_pipeline_stage_module(self, BlockLayer, cfg, mesh):
-    if cfg.set_remat_policy_on_layers_per_stage:
-      BlockLayer = nn.remat(  # pylint: disable=invalid-name
-        BlockLayer,
-        prevent_cse=not cfg.scan_layers,
-        policy=policy,
-        static_argnums=(4, 5),  # Deterministic and model mode are static arguments.
-      )
+  def get_pipeline_stage_module(self, base_stage, cfg, mesh):
     if cfg.num_layers_per_pipeline_stage == 1:
-      stage_module = BlockLayer(config=cfg, mesh=mesh, quant=self.quant)
+      stage_module = base_stage(config=cfg, mesh=mesh, quant=self.quant)
     elif cfg.scan_layers_per_stage:
-        stage_module = self.scan_decoder_layers(
-          cfg, RemattedBlockLayer, cfg.num_layers_per_pipeline_stage, "layers_per_stage", mesh
-        )
+      stage_module = self.scan_decoder_layers(
+        cfg, base_stage, cfg.num_layers_per_pipeline_stage, "layers_per_stage", mesh
+      )
     else:
-      if cfg.set_remat_policy_on_layers_per_stage:
         stage_module = SequentialBlockDecoderLayers(
-            decoder_layer=RemattedBlockLayer,
+            decoder_layer=base_stage,
             num_decoder_layers=cfg.num_layers_per_pipeline_stage,
             config=cfg,
             mesh=mesh,
@@ -369,8 +361,15 @@ class Decoder(nn.Module):
         assert cfg.remat_policy == "full", "Remat policy needs to be on list of remat policies"
         policy = None
 
+    RemattedBlockLayer = nn.remat(  # pylint: disable=invalid-name
+        BlockLayer,
+        prevent_cse=not cfg.scan_layers,
+        policy=policy,
+        static_argnums=(4, 5),  # Deterministic and model mode are static arguments.
+     )
     if cfg.using_pipeline_parallelism:
-      stage_module = self.get_pipeline_stage_module(BlockLayer, cfg, mesh)
+      base_stage = RemattedBlockLayer if  cfg.set_remat_policy_on_layers_per_stage else BlockLayer
+      stage_module = self.get_pipeline_stage_module(base_stage, cfg, mesh)
       y = pipeline.Pipeline(config=cfg, mesh=mesh, layers=stage_module, remat_policy=policy)(
           y,
           decoder_segment_ids,
@@ -379,12 +378,6 @@ class Decoder(nn.Module):
           model_mode,
       )
     else:
-      RemattedBlockLayer = nn.remat(  # pylint: disable=invalid-name
-        BlockLayer,
-        prevent_cse=not cfg.scan_layers,
-        policy=policy,
-        static_argnums=(4, 5),  # Deterministic and model mode are static arguments.
-      )
       if cfg.scan_layers:
         y, _ = self.scan_decoder_layers(cfg, RemattedBlockLayer, cfg.num_decoder_layers, "layers", mesh)(
             y,

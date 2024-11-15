@@ -438,7 +438,7 @@ class Pipeline(nn.Module):
     if self.remat_policy != "custom" and self.config.set_remat_policy_on_layers_per_stage is False:
       # Decoder layer inputs should be saved 
       save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input", "decoder_layer_input")
-
+      save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input")
       if self.remat_policy is not None:
         remat_policy = jax.checkpoint_policies.save_from_both_policies(
           self.remat_policy, save_input_policy
@@ -560,17 +560,13 @@ class Pipeline(nn.Module):
       # the run_one_iteration in this method - the first argument model (i.e. self) is a nn.module instance.
       return model.run_one_iteration(loop_state, positions, segment_ids, deterministic, model_mode, model.layers), None
 
-    if self.remat_policy is not None:
-      remat_policy = jax.checkpoint_policies.save_from_both_policies(
-          self.remat_policy, jax.checkpoint_policies.save_only_these_names("iteration_input")
-      )
-    else:
-      remat_policy = jax.checkpoint_policies.save_only_these_names("iteration_input")
-    run_one_iteration_rematted = nn.remat(
+    if self.config.set_remat_policy_on_pipeline_iterations:
+      remat_policy = self.get_pipeline_remat_policy()
+      run_iteration_scannable = nn.remat(
         run_iteration_scannable,
         prevent_cse=not self.config.scan_pipeline_iterations,  # prevent_cse not used with scan
         policy=remat_policy,
-    )
+      )
 
     # The scan cannot be used on init since it broadcasts the weights, which aren't yet initialized.
     if self.config.scan_pipeline_iterations:
