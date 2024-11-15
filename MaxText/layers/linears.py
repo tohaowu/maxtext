@@ -30,6 +30,7 @@ import numpy as np
 from jax.ad_checkpoint import checkpoint_name
 from jax.experimental import shard_map
 import max_logging
+import math
 
 try:
   from jax.experimental.pallas.ops.tpu import megablox as mblx
@@ -458,7 +459,9 @@ class MoeBlock(nn.Module):
     # calculate expert_capacity = (tokens_per_batch / num_experts) * capacity_factor
     batch_size, seq_len, _ = top_k_indices.shape
     tokens_per_batch = seq_len * self.num_experts_per_tok
-    expert_capacity_per_batch = int((tokens_per_batch / self.num_experts) * self.config.capacity_factor)
+    expert_capacity_per_batch = int(
+        int(max(math.ceil(tokens_per_batch / self.num_experts) * self.config.capacity_factor, self.config.capacity_factor))
+    )
     max_logging.log(f"Applying potential token dropping with a batch expert_capacity of {expert_capacity_per_batch}")
 
     # calculate expert mask and drop tokens if needed
@@ -548,16 +551,15 @@ class MoeBlock(nn.Module):
 
     if self.config.capacity_factor > 0:
       # token dropping if needed
-      dispatch_mask, combine_mask = self.generate_masks(top_k_indices, softmax_probs)
+      weights = self.reshape_and_update_weights(top_k_weights, top_k_indices)
+      dispatch_mask, combine_mask = self.generate_masks(top_k_indices, weights)
       mask_axes = ("activation_batch", "activation_length", None, None)
       dispatch_mask = nn.with_logical_constraint(dispatch_mask, mask_axes)
       combine_mask = nn.with_logical_constraint(combine_mask, mask_axes)
       loss = self.load_balance_loss(top_k_indices, softmax_probs)
       inputs = nn.with_logical_constraint(inputs, ("activation_batch", "activation_length", "activation_embed"))
       with jax.named_scope("dispatch"):
-        dispatch = self.get_einsum(rhs_mesh_axes=mask_axes)(
-            "BSM,BSEC -> EBCM", inputs, dispatch_mask, precision=matmul_precision
-        )
+        dispatch = jnp.einsum("BSM,BSEC -> EBCM", inputs, dispatch_mask, precision=matmul_precision)
         dispatch = nn.with_logical_constraint(
             dispatch, ("activation_exp", "activation_batch_no_exp", None, "activation_embed")
         )
@@ -599,9 +601,7 @@ class MoeBlock(nn.Module):
         intermediate_layer = checkpoint_name(intermediate_layer, "mlpwo")
       with jax.named_scope("combine"):
         # Matmul & element wise operation
-        output = self.get_einsum(rhs_mesh_axes=mask_axes)(
-            "EBCM,BSEC -> BSM", intermediate_layer, combine_mask, precision=matmul_precision
-        )
+        output = jnp.einsum("EBCM,BSEC -> BSM", intermediate_layer, combine_mask, precision=matmul_precision)
       return output, loss
     else:
       weights = self.reshape_and_update_weights(top_k_weights, top_k_indices)
