@@ -177,7 +177,7 @@ value_proj: 'remat'
 qkv_proj: 'remat'
 out_proj: 'remat'
 
-scan_layers: True
+scan_layers: True # Note this overriden by scan_layers_per_stage when using pipeline parallelism.
 param_scan_axis: 1
 
 # The attention parameter dictates the specific algorithm/methodology used to compute the attention scores
