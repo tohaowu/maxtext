@@ -421,7 +421,9 @@ class _HyperParameters:
         assert (
             raw_keys["num_pipeline_microbatches"] >= 2 * num_stages
         ), f"Delayed activation forwarding requires at least 2 * num_stages microbatches, but {num_stages} stages are used with {raw_keys['num_pipeline_microbatches']} microbatches"
-      raw_keys["scan_layers"] = raw_keys["scan_layers_per_stage"] # We have both only to allow for different defaults with PP and without.
+      raw_keys["scan_layers"] = raw_keys[
+          "scan_layers_per_stage"
+      ]  # We have both only to allow for different defaults with PP and without.
     else:
       raw_keys["using_pipeline_parallelism"] = False
 
