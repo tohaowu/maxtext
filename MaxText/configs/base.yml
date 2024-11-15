@@ -154,12 +154,11 @@ pipeline_delay_activation_forwarding: False # This delays the activation forward
 # We have observed extra remat when a remat policy and scanning is performed on both, and recommend the default
 # settings below of scanning and setting a remat policy only over the pipeline iterations.
 # It may be useful to do the reverse when the layers_per_stage is very large.
+# The below settings only have effect when using pipeline parallelism.
 scan_pipeline_iterations: True
-scan_layers_per_stage: False # This only has effect when using pipeline parallelism
-# The value of scan_layers_per_stage will override the value of scan_layers  - we include
-# both only because it allows for separate defaults with and without pipeline parallelism.
+scan_layers_per_stage: False # The value of scan_layers_per_stage will override the value of scan_layers.
 set_remat_policy_on_pipeline_iterations: True
-set_remat_policy_on_layers_per_stage: False # This only has effect when using pipeline parallelism
+set_remat_policy_on_layers_per_stage: False
 
 
 # Choose 'remat_policy' between 'minimal', 'save_dot_except_mlpwi', 'save_dot_except_mlp', 'save_qkv_proj', 'qkv_proj_offloaded', 'custom' 'minimal_offloaded', 'save_out_proj' and 'full'.
