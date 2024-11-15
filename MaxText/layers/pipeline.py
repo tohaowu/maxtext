@@ -431,6 +431,23 @@ class Pipeline(nn.Module):
     new_state = self.get_new_loop_state(stages_output, loop_state)
     return new_state
 
+  def get_pipeline_remat_policy(self):
+    # We ensure that the decoder layer inputs are saved in all cases.
+    # In the case of a custom remat policy they may be offloaded.
+
+    if self.remat_policy != "custom" and self.config.set_remat_policy_on_layers_per_stage is False:
+      # Decoder layer inputs should be saved 
+      save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input", "decoder_layer_input")
+
+      if self.remat_policy is not None:
+        remat_policy = jax.checkpoint_policies.save_from_both_policies(
+          self.remat_policy, save_input_policy
+      )
+      else:
+        remat_policy = save_input_policy
+    return remat_policy
+
+
   @nn.compact
   def __call__(
       self,
