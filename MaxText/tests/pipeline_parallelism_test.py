@@ -202,7 +202,7 @@ class PipelineParallelismTest(unittest.TestCase):
     self.assert_pipeline_same_output_and_grad(config)
 
   # We  generally do not recommend scanning and rematting the inner layers loop, but
-  # it may be useful in some cases when we want to the layers_per_stage large.
+  # it may be useful in some cases when layers_per_stage is large.
   @pytest.mark.tpu
   def test_remat_and_scan_only_layers_per_stage(self):
     # 4 stages, 32 layers (2 repeats, 4 layer per stage), 4 microbatches

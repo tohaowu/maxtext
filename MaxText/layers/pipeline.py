@@ -559,11 +559,10 @@ class Pipeline(nn.Module):
       return model.run_one_iteration(loop_state, positions, segment_ids, deterministic, model_mode, model.layers), None
 
     if self.config.set_remat_policy_on_pipeline_iterations:
-      remat_policy = self.get_pipeline_remat_policy()
       run_iteration_scannable = nn.remat(
         run_iteration_scannable,
         prevent_cse=not self.config.scan_pipeline_iterations,  # prevent_cse not used with scan
-        policy=remat_policy,
+        policy=self.get_pipeline_remat_policy(),
       )
 
     # The scan cannot be used on init since it broadcasts the weights, which aren't yet initialized.

@@ -153,10 +153,10 @@ pipeline_delay_activation_forwarding: False # This delays the activation forward
 #  2)  Inner loop over layers (layers per stage)
 # We have observed extra remat when a remat policy and scanning is performed on both, and recommend the default
 # settings below of scanning and setting a remat policy only over the pipeline iterations.
-# It may be useful to do the reverse when the layers_per_stage is very large (e.g. to hide the PP comms)
+# It may be useful to do the reverse when the layers_per_stage is very large.
 scan_pipeline_iterations: True
-scan_layers_per_stage: False 
-# Note that the value of scan_layers_per_stage will also be used as the value of scan_layers - we include
+scan_layers_per_stage: False # This only has effect when using pipeline parallelism
+# The value of scan_layers_per_stage will override the value of scan_layers  - we include
 # both only because it allows for separate defaults with and without pipeline parallelism.
 set_remat_policy_on_pipeline_iterations: True
 set_remat_policy_on_layers_per_stage: False # This only has effect when using pipeline parallelism
