@@ -213,7 +213,6 @@ class PipelineParallelismTest(unittest.TestCase):
         max_target_length=128,
         base_emb_dim=28,
         ici_pipeline_parallelism=4,
-        base_num_decoder_layers=8,
         num_pipeline_microbatches=4,
         per_device_batch_size=4,
         num_layers_per_pipeline_stage=4,
