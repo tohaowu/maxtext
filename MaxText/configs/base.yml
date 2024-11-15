@@ -149,6 +149,8 @@ num_pipeline_microbatches: -1
 # scanning and setting a remat policy only on the pipeline iteration, and may make this the only option moving forward.
 scan_pipeline_iterations: True # This can be set independently of scan_layers_per_stage, which is relevant when num_layers_per_pipeline_stage > 1.
 scan_layers_per_stage: False # We recommend you keep this to false as we observe unexpected poor behavior when set to true.
+# Note that the value of scan_layers_per_stage will also be used as the value of scan_layers - we include
+# both only because it allows for separate defaults with and without pipeline parallelism.
 set_remat_policy_on_pipeline_iterations: True
 set_remat_policy_on_layers_per_stage: False # We recommend you keep this to false as we observe unexpected poor behavior when set to true.
 pipeline_delay_activation_forwarding: False # This delays the activation forwarding one loop iteration simplifying XLA's task of overlapping since

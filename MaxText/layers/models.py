@@ -170,8 +170,6 @@ class SequentialBlockDecoderLayers(nn.Module):
     return inputs
 
 
-
-
 class Decoder(nn.Module):
   """A stack of decoder layers as a part of an encoder-decoder architecture."""
 

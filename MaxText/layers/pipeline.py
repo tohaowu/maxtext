@@ -434,17 +434,17 @@ class Pipeline(nn.Module):
   def get_pipeline_remat_policy(self):
     # We ensure that the decoder layer inputs are saved in all cases.
     # In the case of a custom remat policy they may be offloaded.
-
     if self.remat_policy != "custom" and self.config.set_remat_policy_on_layers_per_stage is False:
       # Decoder layer inputs should be saved 
       save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input", "decoder_layer_input")
+    else:
       save_input_policy = jax.checkpoint_policies.save_only_these_names("iteration_input")
-      if self.remat_policy is not None:
-        remat_policy = jax.checkpoint_policies.save_from_both_policies(
-          self.remat_policy, save_input_policy
-      )
-      else:
-        remat_policy = save_input_policy
+    if self.remat_policy is not None:
+      remat_policy = jax.checkpoint_policies.save_from_both_policies(
+        self.remat_policy, save_input_policy
+    )
+    else:
+      remat_policy = save_input_policy
     return remat_policy
 
 
@@ -577,7 +577,7 @@ class Pipeline(nn.Module):
       else:
         variable_broadcast.append("non_trainable")
       run_all_iterations_scanned = nn.scan(
-          run_one_iteration_rematted,
+          run_iteration_scannable,
           variable_axes={
               "summaries": 0,
               "aux_loss": 0,
@@ -593,7 +593,7 @@ class Pipeline(nn.Module):
       loop_state, _ = run_all_iterations_scanned(self, loop_state, None)
     else:
       for loop_iteration in range(total_iterations):
-        loop_state, _ = run_one_iteration_rematted(self, loop_state, None)
+        loop_state, _ = run_iteration_scannable(self, loop_state, None)
 
     # The final output is located in the input/output array, however the output microbatches may be permuted relative to the input
     final_output = self.permute_output_micro_per_stage_dim(loop_state["state_io"])
