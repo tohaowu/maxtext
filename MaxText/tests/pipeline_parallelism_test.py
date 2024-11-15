@@ -201,6 +201,31 @@ class PipelineParallelismTest(unittest.TestCase):
     config = pyconfig.config
     self.assert_pipeline_same_output_and_grad(config)
 
+  # We  generally do not recommend scanning and rematting the inner layers loop, but
+  # it may be useful in some cases when we want to the layers_per_stage large.
+  @pytest.mark.tpu
+  def test_remat_and_scan_only_layers_per_stage(self):
+    # 4 stages, 32 layers (2 repeats, 4 layer per stage), 4 microbatches
+    pyconfig.initialize(
+        [sys.argv[0], "configs/base.yml"],
+        enable_checkpointing=False,
+        run_name="circular_minimum_microbatches",
+        max_target_length=128,
+        base_emb_dim=28,
+        ici_pipeline_parallelism=4,
+        base_num_decoder_layers=8,
+        num_pipeline_microbatches=4,
+        per_device_batch_size=4,
+        num_layers_per_pipeline_stage=4,
+        base_num_decoder_layers=32,
+        scan_pipeline_iterations=False,
+        scan_layers_per_stage=True,
+        set_remat_policy_on_pipeline_iterations=False,
+        set_remat_policy_on_layers_per_stage=True
+    )
+    config = pyconfig.config
+    self.assert_pipeline_same_output_and_grad(config)
+
   @pytest.mark.tpu
   def test_full_train_circular(self):
     # Run a full train.py call with 4 stages, 32 layers (2 layers per stage, 4 circular repeats), 8 microbatches

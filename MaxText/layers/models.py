@@ -364,7 +364,7 @@ class Decoder(nn.Module):
         prevent_cse=not cfg.scan_layers,
         policy=policy,
         static_argnums=(4, 5),  # Deterministic and model mode are static arguments.
-     )
+    )
     if cfg.using_pipeline_parallelism:
       base_stage = RemattedBlockLayer if  cfg.set_remat_policy_on_layers_per_stage else BlockLayer
       stage_module = self.get_pipeline_stage_module(base_stage, cfg, mesh)
