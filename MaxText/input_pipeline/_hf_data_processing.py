@@ -205,6 +205,6 @@ def make_hf_eval_iterator(
       add_bos=config.add_bos,
       add_eos=config.add_eos,
       generate_padding_example=eval_generate_padding_example,
-      use_dpo=config.use_dpo_dataset,
+      use_dpo=config.use_dpo,
   )
   return eval_iter
