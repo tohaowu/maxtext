@@ -31,6 +31,7 @@ import jax.numpy as jnp
 from jax.tree_util import tree_flatten_with_path, tree_unflatten
 from typing import Tuple, Sequence
 
+_DEFAULT = "__default__"
 MAX_INT8 = 127.5
 MAX_INT4 = 7.5
 
@@ -195,24 +196,37 @@ def _get_int8_quant_config(config):
   )
 
 
-def _get_weight_only_quant_config(lhs_bits=None, rhs_bits=None):
-  return aqt_config.dot_general_make(lhs_bits=lhs_bits, rhs_bits=rhs_bits)
+def _get_default_config(default=None):
+  default_config = {"w_bits": None, "a_bits": None, "w_scale": 1.0, "r_scale": 1.0, "tile_size": -1}
+  if default:
+    for k in default_config.keys():
+      default_config[k] = default.get(k, default_config[k])
+  return default_config
+
+
+def _dot_general_make(quant_config):
+  lhs_bits = quant_cfg["a_bits"]
+  lhs_scale = quant_cfg["a_scale"]
+  rhs_bits = quant_cfg["w_bits"]
+  rhs_scale = quant_cfg["w_scale"]
+  aqt_dg = aqt_config.dot_general_make(lhs_bits=lhs_bits, rhs_bits=rhs_bits)
+  if lhs_scale < 1.0:
+    aqt_dg.fwd.dg_quantizer.lhs.calibration = functools.partial(calibration.AbsMaxCalibration, scale=lhs_scale)
+  if rhs_scale < 1.0:
+    aqt_dg.fwd.dg_quantizer.rhs.calibration = functools.partial(calibration.AbsMaxCalibration, scale=rhs_scale)
+  return aqt_dg
 
 
 def _get_mixed_precision_quant_config(config, config_file):
   """Set quantization params based on user configuration."""
   with open(config_file, "r") as infile:
     mixed_precision_config = json.load(infile)
-  ret_config = {}
-  ret_config["default"] = [aqt_config.dot_general_make(lhs_bits=None, rhs_bits=8), -1]
+  default_config = _get_default_config(default=mixed_precision_config.get(_DEFAULT, None))
   for layer_name_re, layer_quantization_config in mixed_precision_config.items():
-    rhs_num_bits = layer_quantization_config.get("bits", 8)
-    tile_size = layer_quantization_config.get("tile_size", -1)
-    scale = layer_quantization_config.get("scale", 1.0)
-    aqt_dg = aqt_config.dot_general_make(lhs_bits=None, rhs_bits=rhs_num_bits)
-    if scale < 1.0:
-      aqt_dg.fwd.dg_quantizer.rhs.calibration = functools.partial(calibration.AbsMaxCalibration, scale=scale)
-    ret_config[layer_name_re] = [aqt_dg, tile_size]
+    config = default_config
+    for k in config.keys():
+      config[k] = layer_quantization_config.get(k, config[k])
+    ret_config[layer_name_re] = [_dot_general_make(config), config["tile_size"]]
   return ret_config
 
 
@@ -222,10 +236,6 @@ def _get_quant_config(config):
     return None
   if config.quantization == "int8":
     return _get_int8_quant_config(config)
-  if config.quantization == "int8w":
-    return _get_weight_only_quant_config(lhs_bits=None, rhs_bits=8)
-  if config.quantization == "int4w":
-    return _get_weight_only_quant_config(lhs_bits=None, rhs_bits=4)
   if config.quantization == "intmp":
     assert config.quant_cfg_path, "Must specify quant_cfg for mixed precision quantization"
     return _get_mixed_precision_quant_config(config, config.quant_cfg_path)
